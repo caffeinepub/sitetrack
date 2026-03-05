@@ -33,6 +33,12 @@ export interface PaymentEntry {
   'siteId' : string,
   'amountReceived' : bigint,
 }
+export interface PlatformStats {
+  'totalContractValue' : bigint,
+  'totalReceived' : bigint,
+  'totalSites' : bigint,
+  'totalUsers' : bigint,
+}
 export interface Site {
   'id' : string,
   'totalContractValue' : bigint,
@@ -52,6 +58,11 @@ export interface UserProfile { 'name' : string, 'companyName' : [] | [string] }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface UserSummary {
+  'principal' : Principal,
+  'siteCount' : bigint,
+  'profile' : UserProfile,
+}
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -83,7 +94,12 @@ export interface _SERVICE {
   'addDailyLog' : ActorMethod<[string, DailyLog], undefined>,
   'addDocument' : ActorMethod<[string, Document], undefined>,
   'addPaymentEntry' : ActorMethod<[string, PaymentEntry], undefined>,
+  'adminDeleteSite' : ActorMethod<[string], undefined>,
+  'adminDeleteUser' : ActorMethod<[Principal], undefined>,
+  'adminGetAllUsers' : ActorMethod<[], Array<UserSummary>>,
+  'adminGetPlatformStats' : ActorMethod<[], PlatformStats>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'becomeFirstAdmin' : ActorMethod<[], boolean>,
   'createSite' : ActorMethod<[string, Site], undefined>,
   'deleteDailyLog' : ActorMethod<[string], undefined>,
   'deleteDocument' : ActorMethod<[string], undefined>,

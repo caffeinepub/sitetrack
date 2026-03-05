@@ -16,6 +16,11 @@ export interface Site {
     location: string;
     startDate: string;
 }
+export interface UserSummary {
+    principal: Principal;
+    siteCount: bigint;
+    profile: UserProfile;
+}
 export interface PaymentEntry {
     id: string;
     date: string;
@@ -29,6 +34,12 @@ export interface Document {
     name: string;
     blobId: string;
     siteId: string;
+}
+export interface PlatformStats {
+    totalContractValue: bigint;
+    totalReceived: bigint;
+    totalSites: bigint;
+    totalUsers: bigint;
 }
 export interface DailyLog {
     id: string;
@@ -58,7 +69,12 @@ export interface backendInterface {
     addDailyLog(id: string, log: DailyLog): Promise<void>;
     addDocument(id: string, doc: Document): Promise<void>;
     addPaymentEntry(id: string, entry: PaymentEntry): Promise<void>;
+    adminDeleteSite(siteId: string): Promise<void>;
+    adminDeleteUser(user: Principal): Promise<void>;
+    adminGetAllUsers(): Promise<Array<UserSummary>>;
+    adminGetPlatformStats(): Promise<PlatformStats>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    becomeFirstAdmin(): Promise<boolean>;
     createSite(id: string, site: Site): Promise<void>;
     deleteDailyLog(id: string): Promise<void>;
     deleteDocument(id: string): Promise<void>;

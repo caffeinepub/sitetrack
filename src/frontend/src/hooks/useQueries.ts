@@ -3,9 +3,11 @@ import type {
   DailyLog,
   Document,
   PaymentEntry,
+  PlatformStats,
   Site,
   SiteAggregate,
   UserProfile,
+  UserSummary,
 } from "../backend.d";
 import { useActor } from "./useActor";
 
@@ -233,6 +235,91 @@ export function useDeleteDocument(siteId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents", siteId] });
+    },
+  });
+}
+
+// ─── Admin ─────────────────────────────────────────────────────
+
+export function useIsCallerAdmin() {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["isCallerAdmin"],
+    queryFn: async () => {
+      if (!actor) return false;
+      return actor.isCallerAdmin();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAdminGetAllUsers() {
+  const { actor, isFetching } = useActor();
+  return useQuery<UserSummary[]>({
+    queryKey: ["adminUsers"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.adminGetAllUsers();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useAdminGetPlatformStats() {
+  const { actor, isFetching } = useActor();
+  return useQuery<PlatformStats>({
+    queryKey: ["adminPlatformStats"],
+    queryFn: async () => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.adminGetPlatformStats();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useAdminDeleteUser() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      principal: import("@icp-sdk/core/principal").Principal,
+    ) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.adminDeleteUser(principal);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminUsers"] });
+      queryClient.invalidateQueries({ queryKey: ["adminPlatformStats"] });
+    },
+  });
+}
+
+export function useBecomeFirstAdmin() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.becomeFirstAdmin();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["isCallerAdmin"] });
+    },
+  });
+}
+
+export function useAdminDeleteSite() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (siteId: string) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.adminDeleteSite(siteId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["adminPlatformStats"] });
     },
   });
 }

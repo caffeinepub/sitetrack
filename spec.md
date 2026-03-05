@@ -1,57 +1,31 @@
 # SiteTrack
 
 ## Current State
+Full-stack construction site management app with:
+- Email/Internet Identity login with profile setup (name, company)
+- Site creation (1 per free user) with contract value, client, location, start date
+- Dashboard showing financial summary (received, expense, profit/loss, pending)
+- Daily log entry with labour count, work done, material expense, photo upload
+- Payment entries that auto-update financials
+- Document vault for uploading PDFs/images
+- PDF site report generation
+- Admin panel (view all users/sites, platform stats, delete users/sites)
+- Authorization component with role-based access control
+- Blob storage for file uploads
 
-SiteTrack is a construction site management app with:
-- Login via Internet Identity (email/phone equivalent)
-- One site per free user with fields: name, client name, location, contract value, start date
-- Dashboard showing financial summary (Total Received, Total Expense, Profit/Loss, Pending Amount)
-- Site page with three tabs: Daily Log, Payments, Documents
-- Daily Log: date, labour count, work done, material expense, photo upload (max 3)
-- Payments: amount received, date, notes
-- Documents: upload and list PDFs/images
-- Backend in Motoko with full CRUD APIs for all entities
-- Aggregates computed on the backend (`getSiteAggregates`)
+**Current Bug:** `becomeFirstAdmin()` calls `AccessControl.assignRole(accessControlState, caller, caller, #admin)` which internally checks `isAdmin(state, caller)` and traps because the caller is not yet admin. This causes "Failed to claim admin access".
 
 ## Requested Changes (Diff)
 
 ### Add
-- "Generate Report" button on the SitePage header (next to the back button area)
-- A PDF report modal/sheet that opens when tapped, showing a preview of what will be included
-- Client-side PDF generation using jsPDF (no backend changes needed)
-- The generated PDF includes:
-  - Report title: Site name + "Site Report"
-  - Generated date
-  - Company name and user name (from profile)
-  - Site details: client name, location, contract value, start date
-  - Financial summary: Total Received, Total Expense, Profit/Loss, Pending Amount
-  - Daily Logs table: date, labour count, work done, material expense
-  - Payments table: date, amount received, notes
-  - Documents list: document name, upload date
-- Download button to trigger PDF save
+- Nothing new
 
 ### Modify
-- SitePage.tsx: Add a "Generate Report" icon button in the header; wire it to open the report modal
-- SitePage.tsx: Pass necessary data (site, aggregates, logs, payments, documents) to the report modal
+- Fix `becomeFirstAdmin()` to directly mutate `accessControlState.userRoles` and `accessControlState.adminAssigned` instead of going through `AccessControl.assignRole`. The function must: check if caller is anonymous (return false), check if `accessControlState.adminAssigned` is already true (return false), check if caller has a profile (return false if not), then directly set the role and mark admin as assigned (return true).
 
 ### Remove
-- Nothing removed
+- The redundant local `var adminAssigned` variable; rely solely on `accessControlState.adminAssigned`
 
 ## Implementation Plan
-
-1. Install jsPDF and jspdf-autotable packages in frontend
-2. Create `SiteReportModal.tsx` component in `src/frontend/src/components/`
-   - Accepts site, aggregates, dailyLogs, paymentEntries, documents, userProfile as props
-   - Shows a dialog/sheet with a summary of what will be exported
-   - Has "Download PDF" button that triggers jsPDF generation and file download
-3. Update `SitePage.tsx`:
-   - Add report button (FileText icon) in the header
-   - Fetch required data: getDailyLogsForSite, getPaymentEntriesForSite, getDocumentsForSite, getSiteAggregates, getCallerUserProfile
-   - Pass data into SiteReportModal
-4. PDF content layout (via jsPDF):
-   - Header with site name and report date
-   - Site info section
-   - Financial summary section
-   - Daily logs table (autotable)
-   - Payments table (autotable)
-   - Documents list
+1. Regenerate backend keeping all existing types and functions identical
+2. Only change: `becomeFirstAdmin()` directly writes to `accessControlState.userRoles` map and sets `accessControlState.adminAssigned := true` without calling `AccessControl.assignRole`

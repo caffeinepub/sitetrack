@@ -1,18 +1,20 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useState } from "react";
+import AdminPage from "./components/AdminPage";
 import CreateSitePage from "./components/CreateSitePage";
 import Dashboard from "./components/Dashboard";
 import LoginPage from "./components/LoginPage";
 import ProfileSetup from "./components/ProfileSetup";
 import SitePage from "./components/SitePage";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
-import { useGetCallerUserProfile } from "./hooks/useQueries";
+import { useGetCallerUserProfile, useIsCallerAdmin } from "./hooks/useQueries";
 
 type AppView =
   | { screen: "login" }
   | { screen: "profile-setup" }
   | { screen: "dashboard" }
   | { screen: "create-site" }
+  | { screen: "admin" }
   | {
       screen: "site";
       siteId: string;
@@ -28,6 +30,8 @@ export default function App() {
     isLoading: profileLoading,
     isFetched: profileFetched,
   } = useGetCallerUserProfile();
+
+  const { data: isAdmin } = useIsCallerAdmin();
 
   const [view, setView] = useState<AppView>({ screen: "dashboard" });
 
@@ -104,6 +108,9 @@ export default function App() {
           />
         );
 
+      case "admin":
+        return <AdminPage onBack={() => setView({ screen: "dashboard" })} />;
+
       default: {
         return (
           <Dashboard
@@ -114,6 +121,10 @@ export default function App() {
             onEnterLog={(siteId) =>
               setView({ screen: "site", siteId, tab: "daily-log" })
             }
+            onAdminPanel={
+              isAdmin ? () => setView({ screen: "admin" }) : undefined
+            }
+            isAdminResolved={isAdmin !== undefined}
           />
         );
       }

@@ -8,8 +8,6 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import {
   Building2,
   CalendarDays,
@@ -73,245 +71,114 @@ export default function SiteReportModal({ siteId }: SiteReportModalProps) {
     setIsGenerating(true);
 
     try {
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-      const margin = 15;
-      const contentW = pageW - margin * 2;
-      let y = margin;
+      // Build printable HTML report and use browser print
+      const printContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <title>${site.name} — Site Report</title>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: Arial, sans-serif; font-size: 11px; color: #1e1b15; background: white; }
+            .header { background: #1e1b15; color: white; padding: 16px 20px 14px; }
+            .header .brand { color: #d97706; font-size: 7px; font-weight: bold; letter-spacing: 2px; margin-bottom: 6px; }
+            .header h1 { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+            .header .meta { font-size: 8px; color: #c4bb9d; }
+            .content { padding: 16px 20px; }
+            .section-title { font-size: 10px; font-weight: bold; border-left: 3px solid #d97706; padding-left: 8px; margin: 14px 0 8px; }
+            .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #fefcf2; border: 1px solid #e5dcc4; border-radius: 4px; padding: 10px; margin-bottom: 10px; }
+            .detail-item .label { font-size: 7px; color: #78716e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+            .detail-item .value { font-size: 10px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; font-size: 9px; margin-bottom: 10px; }
+            th { background: #1e1b15; color: white; padding: 5px 8px; text-align: left; font-size: 8px; }
+            th.right { text-align: right; }
+            td { padding: 5px 8px; border-bottom: 1px solid #e5dcc4; vertical-align: top; }
+            td.right { text-align: right; }
+            tr:nth-child(even) td { background: #fefcf2; }
+            .footer { margin-top: 16px; padding-top: 8px; border-top: 1px solid #e5dcc4; display: flex; justify-content: space-between; font-size: 7px; color: #78716e; }
+            .no-data { color: #78716e; font-style: italic; font-size: 9px; margin-bottom: 10px; }
+            @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="brand">SITETRACK</div>
+            <h1>${site.name} — Site Report</h1>
+            <div class="meta">
+              Generated: ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+              ${userProfile ? ` &nbsp;·&nbsp; Prepared by: ${userProfile.name}${userProfile.companyName ? ` · ${userProfile.companyName}` : ""}` : ""}
+            </div>
+          </div>
+          <div class="content">
+            <div class="section-title">Site Details</div>
+            <div class="detail-grid">
+              <div class="detail-item"><div class="label">Client Name</div><div class="value">${site.clientName}</div></div>
+              <div class="detail-item"><div class="label">Location</div><div class="value">${site.location}</div></div>
+              <div class="detail-item"><div class="label">Contract Value</div><div class="value">${formatRupees(site.totalContractValue)}</div></div>
+              <div class="detail-item"><div class="label">Start Date</div><div class="value">${formatDate(site.startDate)}</div></div>
+            </div>
 
-      // ── Colors ──────────────────────────────────────────────────
-      const amber = [217, 119, 6] as [number, number, number];
-      const dark = [30, 27, 21] as [number, number, number];
-      const muted = [120, 113, 99] as [number, number, number];
-      const white = [255, 255, 255] as [number, number, number];
-      const light = [254, 252, 242] as [number, number, number];
-      const border = [229, 220, 196] as [number, number, number];
+            <div class="section-title">Financial Summary</div>
+            <table>
+              <thead><tr><th>Metric</th><th class="right">Amount</th></tr></thead>
+              <tbody>
+                <tr><td>Total Received</td><td class="right">${formatRupees(aggregates.totalReceived)}</td></tr>
+                <tr><td>Total Expense</td><td class="right">${formatRupees(aggregates.totalExpense)}</td></tr>
+                <tr><td>${Number(aggregates.profitLoss) >= 0 ? "Profit" : "Loss"}</td><td class="right">${formatRupees(aggregates.profitLoss)}</td></tr>
+                <tr><td>Pending Amount</td><td class="right">${formatRupees(aggregates.pendingAmount)}</td></tr>
+              </tbody>
+            </table>
 
-      // ── Header Banner ────────────────────────────────────────────
-      doc.setFillColor(...dark);
-      doc.rect(0, 0, pageW, 42, "F");
+            <div class="section-title">Daily Logs (${sortedLogs.length})</div>
+            ${
+              sortedLogs.length === 0
+                ? '<div class="no-data">No daily logs recorded yet.</div>'
+                : `<table>
+                  <thead><tr><th>Date</th><th>Labour</th><th>Work Done</th><th class="right">Material Expense</th></tr></thead>
+                  <tbody>${sortedLogs.map((log) => `<tr><td>${formatDate(log.date)}</td><td>${Number(log.labourCount)}</td><td>${log.workDone}</td><td class="right">${formatRupees(log.materialExpense)}</td></tr>`).join("")}</tbody>
+                </table>`
+            }
 
-      doc.setTextColor(...amber);
-      doc.setFontSize(7);
-      doc.setFont("helvetica", "bold");
-      doc.text("SITETRACK", margin, 13);
+            <div class="section-title">Payments (${sortedPayments.length})</div>
+            ${
+              sortedPayments.length === 0
+                ? '<div class="no-data">No payments recorded yet.</div>'
+                : `<table>
+                  <thead><tr><th>Date</th><th class="right">Amount Received</th><th>Notes</th></tr></thead>
+                  <tbody>${sortedPayments.map((p) => `<tr><td>${formatDate(p.date)}</td><td class="right">${formatRupees(p.amountReceived)}</td><td>${p.notes || "—"}</td></tr>`).join("")}</tbody>
+                </table>`
+            }
 
-      doc.setTextColor(...white);
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      const title = `${site.name} — Site Report`;
-      doc.text(title, margin, 24);
+            <div class="section-title">Documents (${(documents ?? []).length})</div>
+            ${
+              !documents || documents.length === 0
+                ? '<div class="no-data">No documents uploaded yet.</div>'
+                : `<table>
+                  <thead><tr><th>Document Name</th><th>Uploaded Date</th></tr></thead>
+                  <tbody>${documents.map((d) => `<tr><td>${d.name}</td><td>${formatDate(d.uploadedDate)}</td></tr>`).join("")}</tbody>
+                </table>`
+            }
 
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(196, 187, 163);
-      const generatedLine = `Generated: ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`;
-      const preparedBy = userProfile
-        ? `Prepared by: ${userProfile.name}${userProfile.companyName ? ` · ${userProfile.companyName}` : ""}`
-        : "";
-      doc.text(generatedLine, margin, 32);
-      if (preparedBy) doc.text(preparedBy, margin, 38);
+            <div class="footer">
+              <span>SiteTrack — Confidential</span>
+              <span>${new Date().toLocaleDateString("en-IN")}</span>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
 
-      y = 52;
-
-      // ── Helper: Section heading ──────────────────────────────────
-      function drawSection(label: string) {
-        if (y > pageH - 40) {
-          doc.addPage();
-          y = margin;
-        }
-        doc.setFillColor(...amber);
-        doc.rect(margin, y, 3, 6, "F");
-        doc.setTextColor(...dark);
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        doc.text(label, margin + 6, y + 4.5);
-        y += 10;
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        alert("Please allow popups to download the report.");
+        return;
       }
-
-      // ── Helper: key-value row ───────────────────────────────────
-      function drawKV(label: string, value: string, col = 0) {
-        const colW = contentW / 2;
-        const x = margin + col * colW;
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(...muted);
-        doc.text(label, x, y);
-        doc.setTextColor(...dark);
-        doc.setFont("helvetica", "bold");
-        doc.text(value, x, y + 5);
-        if (col === 1) y += 12;
-      }
-
-      // ── Site Details ─────────────────────────────────────────────
-      drawSection("Site Details");
-      doc.setFillColor(...light);
-      doc.roundedRect(margin, y, contentW, 26, 2, 2, "F");
-      doc.setDrawColor(...border);
-      doc.roundedRect(margin, y, contentW, 26, 2, 2, "S");
-      y += 5;
-      drawKV("Client Name", site.clientName, 0);
-      drawKV("Location", site.location, 1);
-      drawKV("Contract Value", formatRupees(site.totalContractValue), 0);
-      drawKV("Start Date", formatDate(site.startDate), 1);
-      y += 4;
-
-      // ── Financial Summary ────────────────────────────────────────
-      drawSection("Financial Summary");
-      autoTable(doc, {
-        startY: y,
-        margin: { left: margin, right: margin },
-        head: [["Metric", "Amount"]],
-        body: [
-          ["Total Received", formatRupees(aggregates.totalReceived)],
-          ["Total Expense", formatRupees(aggregates.totalExpense)],
-          [
-            Number(aggregates.profitLoss) >= 0 ? "Profit" : "Loss",
-            formatRupees(aggregates.profitLoss),
-          ],
-          ["Pending Amount", formatRupees(aggregates.pendingAmount)],
-        ],
-        theme: "grid",
-        headStyles: {
-          fillColor: dark,
-          textColor: white,
-          fontStyle: "bold",
-          fontSize: 9,
-        },
-        bodyStyles: { fontSize: 9, textColor: dark },
-        alternateRowStyles: { fillColor: light },
-        columnStyles: { 1: { halign: "right" } },
-      });
-      y =
-        (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
-          .finalY + 8;
-
-      // ── Daily Logs ───────────────────────────────────────────────
-      drawSection(`Daily Logs (${sortedLogs.length})`);
-      if (sortedLogs.length === 0) {
-        doc.setFontSize(9);
-        doc.setTextColor(...muted);
-        doc.text("No daily logs recorded yet.", margin, y);
-        y += 8;
-      } else {
-        autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin },
-          head: [["Date", "Labour", "Work Done", "Material Expense"]],
-          body: sortedLogs.map((log) => [
-            formatDate(log.date),
-            String(Number(log.labourCount)),
-            log.workDone,
-            formatRupees(log.materialExpense),
-          ]),
-          theme: "grid",
-          headStyles: {
-            fillColor: dark,
-            textColor: white,
-            fontStyle: "bold",
-            fontSize: 8,
-          },
-          bodyStyles: { fontSize: 8, textColor: dark },
-          alternateRowStyles: { fillColor: light },
-          columnStyles: {
-            0: { cellWidth: 24 },
-            1: { cellWidth: 16, halign: "center" },
-            2: { cellWidth: "auto" },
-            3: { cellWidth: 30, halign: "right" },
-          },
-        });
-        y =
-          (doc as unknown as { lastAutoTable: { finalY: number } })
-            .lastAutoTable.finalY + 8;
-      }
-
-      // ── Payments ─────────────────────────────────────────────────
-      drawSection(`Payments (${sortedPayments.length})`);
-      if (sortedPayments.length === 0) {
-        doc.setFontSize(9);
-        doc.setTextColor(...muted);
-        doc.text("No payments recorded yet.", margin, y);
-        y += 8;
-      } else {
-        autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin },
-          head: [["Date", "Amount Received", "Notes"]],
-          body: sortedPayments.map((p) => [
-            formatDate(p.date),
-            formatRupees(p.amountReceived),
-            p.notes || "—",
-          ]),
-          theme: "grid",
-          headStyles: {
-            fillColor: dark,
-            textColor: white,
-            fontStyle: "bold",
-            fontSize: 8,
-          },
-          bodyStyles: { fontSize: 8, textColor: dark },
-          alternateRowStyles: { fillColor: light },
-          columnStyles: {
-            0: { cellWidth: 24 },
-            1: { cellWidth: 35, halign: "right" },
-            2: { cellWidth: "auto" },
-          },
-        });
-        y =
-          (doc as unknown as { lastAutoTable: { finalY: number } })
-            .lastAutoTable.finalY + 8;
-      }
-
-      // ── Documents ────────────────────────────────────────────────
-      drawSection(`Documents (${(documents ?? []).length})`);
-      if (!documents || documents.length === 0) {
-        doc.setFontSize(9);
-        doc.setTextColor(...muted);
-        doc.text("No documents uploaded yet.", margin, y);
-        y += 8;
-      } else {
-        autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin },
-          head: [["Document Name", "Uploaded Date"]],
-          body: documents.map((d) => [d.name, formatDate(d.uploadedDate)]),
-          theme: "grid",
-          headStyles: {
-            fillColor: dark,
-            textColor: white,
-            fontStyle: "bold",
-            fontSize: 8,
-          },
-          bodyStyles: { fontSize: 8, textColor: dark },
-          alternateRowStyles: { fillColor: light },
-          columnStyles: { 1: { cellWidth: 35 } },
-        });
-      }
-
-      // ── Footer on every page ─────────────────────────────────────
-      const totalPages = (
-        doc.internal as unknown as { getNumberOfPages(): number }
-      ).getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i);
-        doc.setDrawColor(...border);
-        doc.line(margin, pageH - 12, pageW - margin, pageH - 12);
-        doc.setFontSize(7);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(...muted);
-        doc.text("SiteTrack — Confidential", margin, pageH - 7);
-        doc.text(`Page ${i} of ${totalPages}`, pageW - margin, pageH - 7, {
-          align: "right",
-        });
-      }
-
-      const safeFileName = site.name.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-      doc.save(`${safeFileName}_site_report.pdf`);
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.print();
+      };
     } finally {
       setIsGenerating(false);
     }

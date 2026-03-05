@@ -8,12 +8,16 @@ import {
   Loader2,
   LogOut,
   MapPin,
+  Shield,
+  ShieldCheck,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { SiteAggregate } from "../backend.d";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
+  useBecomeFirstAdmin,
   useGetAllSites,
   useGetCallerUserProfile,
   useGetSiteAggregates,
@@ -24,6 +28,8 @@ interface DashboardProps {
   onCreateSite: () => void;
   onViewSite: (siteId: string) => void;
   onEnterLog: (siteId: string) => void;
+  onAdminPanel?: () => void;
+  isAdminResolved?: boolean;
 }
 
 function FinancialCard({
@@ -166,11 +172,30 @@ export default function Dashboard({
   onCreateSite,
   onViewSite,
   onEnterLog,
+  onAdminPanel,
+  isAdminResolved,
 }: DashboardProps) {
   const { data: sites, isLoading: sitesLoading } = useGetAllSites();
   const { data: profile } = useGetCallerUserProfile();
   const { clear } = useInternetIdentity();
   const queryClient = useQueryClient();
+  const { mutateAsync: becomeFirstAdmin, isPending: claimingAdmin } =
+    useBecomeFirstAdmin();
+
+  const handleClaimAdmin = async () => {
+    try {
+      const result = await becomeFirstAdmin();
+      if (result) {
+        toast.success(
+          "You are now admin! Reload the page to see the Admin panel.",
+        );
+      } else {
+        toast.error("An admin already exists. Contact them for access.");
+      }
+    } catch {
+      toast.error("Failed to claim admin access. Please try again.");
+    }
+  };
 
   const site = sites?.[0];
 
@@ -199,11 +224,40 @@ export default function Dashboard({
               SiteTrack
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {profile?.companyName && (
               <span className="text-xs text-muted-foreground hidden sm:block truncate max-w-[120px]">
                 {profile.companyName}
               </span>
+            )}
+            {onAdminPanel && (
+              <button
+                type="button"
+                data-ocid="nav.admin.link"
+                onClick={onAdminPanel}
+                className="text-muted-foreground hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-primary/10 flex items-center gap-1.5 text-xs font-medium"
+                title="Admin Panel"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span className="hidden sm:inline">Admin</span>
+              </button>
+            )}
+            {isAdminResolved && !onAdminPanel && (
+              <button
+                type="button"
+                data-ocid="nav.claim_admin_button"
+                onClick={handleClaimAdmin}
+                disabled={claimingAdmin}
+                className="text-muted-foreground hover:text-amber-500 transition-colors p-1.5 rounded-lg hover:bg-amber-500/10 flex items-center gap-1.5 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Claim Admin Access"
+              >
+                {claimingAdmin ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Shield className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">Claim Admin</span>
+              </button>
             )}
             <button
               type="button"

@@ -7,11 +7,12 @@ import Map "mo:core/Map";
 import Order "mo:core/Order";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Bool "mo:core/Bool";
 
 import Storage "blob-storage/Storage";
+import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 import MixinStorage "blob-storage/Mixin";
-import AccessControl "authorization/access-control";
 
 actor {
   include MixinStorage();
@@ -66,6 +67,19 @@ actor {
     pendingAmount : Nat;
   };
 
+  public type UserSummary = {
+    principal : Principal;
+    profile : UserProfile;
+    siteCount : Nat;
+  };
+
+  public type PlatformStats = {
+    totalUsers : Nat;
+    totalSites : Nat;
+    totalContractValue : Nat;
+    totalReceived : Nat;
+  };
+
   module Site {
     public func compare(site1 : Site, site2 : Site) : Order.Order {
       Text.compare(site1.id, site2.id);
@@ -95,6 +109,8 @@ actor {
   let dailyLogs = Map.empty<Text, DailyLog>();
   let paymentEntries = Map.empty<Text, PaymentEntry>();
   let documents = Map.empty<Text, Document>();
+
+  var adminAssigned = false; // TRACK IF ADMIN HAS BEEN ASSIGNED
 
   func verifySiteOwnership(caller : Principal, siteId : Text) : Site {
     switch (sites.get(siteId)) {
@@ -403,5 +419,137 @@ actor {
     };
     let _ = verifySiteOwnership(caller, siteId);
     computeAggregates(siteId);
+  };
+
+  // ADMIN FUNCTIONS
+
+  func adminCheck(caller : Principal) {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Admin privileges required");
+    };
+  };
+
+  func getSiteCountForUser(principal : Principal) : Nat {
+    var count = 0;
+    sites.values().toArray().forEach(
+      func(site) {
+        if (site.user == principal) { count += 1 };
+      }
+    );
+    count;
+  };
+
+  public query ({ caller }) func adminGetAllUsers() : async [UserSummary] {
+    adminCheck(caller);
+
+    let summaries = List.empty<UserSummary>();
+    userProfiles.forEach(
+      func(principal, profile) {
+        let siteCount = getSiteCountForUser(principal);
+        summaries.add({
+          principal;
+          profile;
+          siteCount;
+        });
+      }
+    );
+    summaries.toArray();
+  };
+
+  public query ({ caller }) func adminGetPlatformStats() : async PlatformStats {
+    adminCheck(caller);
+
+    var totalContractValue = 0;
+    var totalReceived = 0;
+
+    sites.values().toArray().forEach(
+      func(site) {
+        totalContractValue += site.totalContractValue;
+      }
+    );
+
+    paymentEntries.values().toArray().forEach(
+      func(entry) {
+        totalReceived += entry.amountReceived;
+      }
+    );
+
+    {
+      totalUsers = userProfiles.size();
+      totalSites = sites.size();
+      totalContractValue;
+      totalReceived;
+    };
+  };
+
+  func deleteUserSites(user : Principal) {
+    let siteIdsToDelete = sites.values().toArray().filter(
+      func(site) { site.user == user }
+    ).map(
+      func(site) { site.id }
+    );
+
+    for (siteId in siteIdsToDelete.values()) {
+      deleteSiteAndAssociatedData(siteId);
+    };
+  };
+
+  func deleteSiteAndAssociatedData(siteId : Text) {
+    sites.remove(siteId);
+    let logsToDelete = dailyLogs.values().toArray().filter(
+      func(log) { log.siteId == siteId }
+    );
+    logsToDelete.forEach(
+      func(log) { dailyLogs.remove(log.id) }
+    );
+
+    let paymentEntriesToDelete = paymentEntries.values().toArray().filter(
+      func(entry) { entry.siteId == siteId }
+    );
+    paymentEntriesToDelete.forEach(
+      func(entry) { paymentEntries.remove(entry.id) }
+    );
+
+    let docsToDelete = documents.values().toArray().filter(
+      func(doc) { doc.siteId == siteId }
+    );
+    docsToDelete.forEach(
+      func(doc) { documents.remove(doc.id) }
+    );
+  };
+
+  public shared ({ caller }) func adminDeleteUser(user : Principal) : async () {
+    adminCheck(caller);
+    userProfiles.remove(user);
+    deleteUserSites(user);
+  };
+
+  public shared ({ caller }) func adminDeleteSite(siteId : Text) : async () {
+    adminCheck(caller);
+    deleteSiteAndAssociatedData(siteId);
+  };
+
+  public shared ({ caller }) func becomeFirstAdmin() : async Bool {
+    // Check if caller is anonymous
+    if (caller.isAnonymous()) {
+      return false;
+    };
+
+    // Check if caller has a profile (is a registered user)
+    switch (userProfiles.get(caller)) {
+      case (null) { return false };
+      case (_) {
+        // Check if admin has already been assigned
+        if (adminAssigned) {
+          return false;
+        } else {
+          // Directly assign admin role without going through AccessControl.assignRole
+          // which has an admin-only guard that would trap
+          accessControlState.userRoles.add(caller, #admin);
+          adminAssigned := true;
+          return true;
+        };
+      };
+    };
   };
 };

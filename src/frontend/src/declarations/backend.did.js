@@ -42,6 +42,21 @@ export const PaymentEntry = IDL.Record({
   'siteId' : IDL.Text,
   'amountReceived' : IDL.Nat,
 });
+export const UserProfile = IDL.Record({
+  'name' : IDL.Text,
+  'companyName' : IDL.Opt(IDL.Text),
+});
+export const UserSummary = IDL.Record({
+  'principal' : IDL.Principal,
+  'siteCount' : IDL.Nat,
+  'profile' : UserProfile,
+});
+export const PlatformStats = IDL.Record({
+  'totalContractValue' : IDL.Nat,
+  'totalReceived' : IDL.Nat,
+  'totalSites' : IDL.Nat,
+  'totalUsers' : IDL.Nat,
+});
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
@@ -55,10 +70,6 @@ export const Site = IDL.Record({
   'user' : IDL.Principal,
   'location' : IDL.Text,
   'startDate' : IDL.Text,
-});
-export const UserProfile = IDL.Record({
-  'name' : IDL.Text,
-  'companyName' : IDL.Opt(IDL.Text),
 });
 export const SiteAggregate = IDL.Record({
   'totalReceived' : IDL.Nat,
@@ -98,7 +109,12 @@ export const idlService = IDL.Service({
   'addDailyLog' : IDL.Func([IDL.Text, DailyLog], [], []),
   'addDocument' : IDL.Func([IDL.Text, Document], [], []),
   'addPaymentEntry' : IDL.Func([IDL.Text, PaymentEntry], [], []),
+  'adminDeleteSite' : IDL.Func([IDL.Text], [], []),
+  'adminDeleteUser' : IDL.Func([IDL.Principal], [], []),
+  'adminGetAllUsers' : IDL.Func([], [IDL.Vec(UserSummary)], ['query']),
+  'adminGetPlatformStats' : IDL.Func([], [PlatformStats], ['query']),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'becomeFirstAdmin' : IDL.Func([], [IDL.Bool], []),
   'createSite' : IDL.Func([IDL.Text, Site], [], []),
   'deleteDailyLog' : IDL.Func([IDL.Text], [], []),
   'deleteDocument' : IDL.Func([IDL.Text], [], []),
@@ -168,6 +184,21 @@ export const idlFactory = ({ IDL }) => {
     'siteId' : IDL.Text,
     'amountReceived' : IDL.Nat,
   });
+  const UserProfile = IDL.Record({
+    'name' : IDL.Text,
+    'companyName' : IDL.Opt(IDL.Text),
+  });
+  const UserSummary = IDL.Record({
+    'principal' : IDL.Principal,
+    'siteCount' : IDL.Nat,
+    'profile' : UserProfile,
+  });
+  const PlatformStats = IDL.Record({
+    'totalContractValue' : IDL.Nat,
+    'totalReceived' : IDL.Nat,
+    'totalSites' : IDL.Nat,
+    'totalUsers' : IDL.Nat,
+  });
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
@@ -181,10 +212,6 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'location' : IDL.Text,
     'startDate' : IDL.Text,
-  });
-  const UserProfile = IDL.Record({
-    'name' : IDL.Text,
-    'companyName' : IDL.Opt(IDL.Text),
   });
   const SiteAggregate = IDL.Record({
     'totalReceived' : IDL.Nat,
@@ -224,7 +251,12 @@ export const idlFactory = ({ IDL }) => {
     'addDailyLog' : IDL.Func([IDL.Text, DailyLog], [], []),
     'addDocument' : IDL.Func([IDL.Text, Document], [], []),
     'addPaymentEntry' : IDL.Func([IDL.Text, PaymentEntry], [], []),
+    'adminDeleteSite' : IDL.Func([IDL.Text], [], []),
+    'adminDeleteUser' : IDL.Func([IDL.Principal], [], []),
+    'adminGetAllUsers' : IDL.Func([], [IDL.Vec(UserSummary)], ['query']),
+    'adminGetPlatformStats' : IDL.Func([], [PlatformStats], ['query']),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'becomeFirstAdmin' : IDL.Func([], [IDL.Bool], []),
     'createSite' : IDL.Func([IDL.Text, Site], [], []),
     'deleteDailyLog' : IDL.Func([IDL.Text], [], []),
     'deleteDocument' : IDL.Func([IDL.Text], [], []),
