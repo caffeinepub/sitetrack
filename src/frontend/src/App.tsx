@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import AdminPage from "./components/AdminPage";
 import CreateSitePage from "./components/CreateSitePage";
 import Dashboard from "./components/Dashboard";
@@ -24,6 +25,19 @@ type AppView =
 export default function App() {
   const { identity, isInitializing } = useInternetIdentity();
   const isAuthenticated = !!identity;
+
+  const queryClient = useQueryClient();
+  const prevIdentityRef = useRef<typeof identity>(undefined);
+
+  useEffect(() => {
+    if (
+      prevIdentityRef.current !== undefined &&
+      prevIdentityRef.current !== identity
+    ) {
+      queryClient.clear();
+    }
+    prevIdentityRef.current = identity;
+  }, [identity, queryClient]);
 
   const {
     data: userProfile,

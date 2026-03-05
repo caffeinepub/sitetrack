@@ -1,31 +1,34 @@
 # SiteTrack
 
 ## Current State
-Full-stack construction site management app with:
-- Email/Internet Identity login with profile setup (name, company)
-- Site creation (1 per free user) with contract value, client, location, start date
-- Dashboard showing financial summary (received, expense, profit/loss, pending)
-- Daily log entry with labour count, work done, material expense, photo upload
-- Payment entries that auto-update financials
-- Document vault for uploading PDFs/images
-- PDF site report generation
-- Admin panel (view all users/sites, platform stats, delete users/sites)
-- Authorization component with role-based access control
-- Blob storage for file uploads
 
-**Current Bug:** `becomeFirstAdmin()` calls `AccessControl.assignRole(accessControlState, caller, caller, #admin)` which internally checks `isAdmin(state, caller)` and traps because the caller is not yet admin. This causes "Failed to claim admin access".
+Full-stack construction site tracking app with: user login (Internet Identity), site creation, daily logs, payment entries, document vault, PDF reports, and an admin panel.
+
+Two critical security bugs exist in the backend `access-control.mo`:
+
+1. `isAdmin()` calls `getUserRole()` which calls `Runtime.trap("User is not registered")` for any caller not in the roles map. This means `isCallerAdmin()` throws a canister trap instead of returning `false` for unregistered users.
+
+2. `hasPermission()` also calls `getUserRole()` which traps for unregistered users. This affects ALL protected endpoints including `getAllSites()`, `getDailyLogsForSite()`, etc.
+
+Both bugs stem from the same root cause: `getUserRole` traps on unregistered callers instead of returning a safe default.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Nothing new
+- Nothing new.
 
 ### Modify
-- Fix `becomeFirstAdmin()` to directly mutate `accessControlState.userRoles` and `accessControlState.adminAssigned` instead of going through `AccessControl.assignRole`. The function must: check if caller is anonymous (return false), check if `accessControlState.adminAssigned` is already true (return false), check if caller has a profile (return false if not), then directly set the role and mark admin as assigned (return true).
+- Fix `isAdmin()` in `access-control.mo`: safely return `false` for callers not in the roles map or anonymous, without calling `getUserRole`.
+- Fix `hasPermission()` in `access-control.mo`: safely return `false` for callers not in the roles map. Anonymous callers only pass `#guest` permission checks.
+- Keep `getUserRole()` behavior unchanged.
+- All other logic in `main.mo` stays identical (getAllSites filters by caller for non-admins, verifySiteOwnership enforces ownership).
 
 ### Remove
-- The redundant local `var adminAssigned` variable; rely solely on `accessControlState.adminAssigned`
+- Nothing.
 
 ## Implementation Plan
-1. Regenerate backend keeping all existing types and functions identical
-2. Only change: `becomeFirstAdmin()` directly writes to `accessControlState.userRoles` map and sets `accessControlState.adminAssigned := true` without calling `AccessControl.assignRole`
+
+1. In `access-control.mo`, rewrite `isAdmin` to directly pattern-match `state.userRoles.get(caller)` and return `false` for `null` or non-admin roles, without calling `getUserRole`.
+2. In `access-control.mo`, rewrite `hasPermission` to directly pattern-match `state.userRoles.get(caller)` safely: anonymous only passes `#guest`; not-in-map returns `false`; admin passes everything; user passes `#user` and `#guest`; guest passes only `#guest`.
+3. Keep `getUserRole`, `initialize`, `assignRole` unchanged.
+4. Keep all of `main.mo` unchanged.
